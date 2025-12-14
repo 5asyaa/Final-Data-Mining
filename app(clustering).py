@@ -1,10 +1,9 @@
 # =====================================================
-# HIERARCHICAL CLUSTERING – STREAMLIT FINAL
+# HIERARCHICAL CLUSTERING – STREAMLIT FINAL (REVISED)
 # =====================================================
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -23,64 +22,71 @@ st.set_page_config(
 
 st.title("Hierarchical Clustering Penjualan Tiket Pesawat")
 st.write("""
-Aplikasi ini menampilkan **seluruh proses Hierarchical Clustering**  
-mulai dari *data cleaning* hingga *evaluasi Silhouette Score*.
+Aplikasi ini menampilkan proses **Hierarchical Clustering**
+untuk segmentasi transaksi penjualan tiket pesawat
+berdasarkan **jumlah tiket** dan **harga tiket**.
 """)
 
 # =====================================================
-# LOAD DATA (FIX, TANPA UPLOAD)
+# LOAD DATA
 # =====================================================
-st.header("Load Dataset")
+st.header("1️⃣ Load Dataset")
 
 df = pd.read_csv("penjualan_tiket_pesawat.csv")
 
-st.write("**Dataset Awal**")
+st.write("**Contoh Dataset**")
 st.dataframe(df.head())
 
 # =====================================================
 # DATA CLEANING
 # =====================================================
-st.header("Data Cleaning")
+st.header("2️⃣ Data Cleaning")
 
-# Cek missing value
 missing = df.isnull().sum()
-
 st.write("**Jumlah Missing Value per Kolom**")
 st.dataframe(missing)
 
-# Hapus missing value (jika ada)
 df_clean = df.dropna().reset_index(drop=True)
 
-st.write("**Dataset Setelah Cleaning**")
-st.dataframe(df_clean.head())
+st.success("Dataset bersih dan siap digunakan.")
 
 # =====================================================
-# SELEKSI DATA NUMERIK
+# SELEKSI FITUR (PERBAIKAN METODOLOGI)
 # =====================================================
-st.header("Seleksi Fitur Numerik")
+st.header("3️⃣ Seleksi Fitur untuk Clustering")
 
-data = df_clean.select_dtypes(include=["int64", "float64"])
+st.write("""
+Clustering hanya menggunakan **fitur independen**:
+- `Ticket_Quantity`
+- `Ticket_Price`
 
-st.write("**Kolom Numerik yang Digunakan untuk Clustering:**")
-st.write(list(data.columns))
+Fitur `Total` **tidak digunakan** karena merupakan hasil perkalian
+kedua fitur tersebut dan dapat menyebabkan bias jarak.
+""")
+
+features = ["Ticket_Quantity", "Ticket_Price"]
+data = df_clean[features]
+
+st.write("**Fitur yang Digunakan:**")
+st.write(features)
 
 # =====================================================
 # NORMALISASI DATA
 # =====================================================
-st.header("Normalisasi Data (StandardScaler)")
+st.header("4️⃣ Normalisasi Data (StandardScaler)")
 
 scaler = StandardScaler()
 scaled_data = scaler.fit_transform(data)
 
 st.write("""
-Normalisasi dilakukan agar semua fitur berada pada skala yang sama,
-karena Hierarchical Clustering berbasis jarak.
+Normalisasi dilakukan agar setiap fitur memiliki skala yang sama,
+karena Hierarchical Clustering berbasis perhitungan jarak.
 """)
 
 # =====================================================
 # DENDROGRAM
 # =====================================================
-st.header("Dendrogram Hierarchical Clustering")
+st.header("5️⃣ Dendrogram Hierarchical Clustering")
 
 linked = linkage(scaled_data, method="ward")
 
@@ -92,23 +98,18 @@ ax.set_ylabel("Jarak")
 st.pyplot(fig)
 
 st.info("""
-Dendrogram digunakan untuk melihat proses penggabungan data
-dan membantu menentukan jumlah cluster yang optimal.
+Dendrogram digunakan untuk melihat struktur hierarki penggabungan data
+dan memberikan gambaran awal jumlah cluster.
 """)
 
 # =====================================================
-# EVALUASI SILHOUETTE (DINAMIS)
+# EVALUASI SILHOUETTE SCORE
 # =====================================================
-st.header("Evaluasi Silhouette Score")
+st.header("6️⃣ Evaluasi Silhouette Score")
 
-k = st.slider("Pilih Jumlah Cluster (k)", 2, 5, 3)
+k = st.slider("Pilih Jumlah Cluster (k)", 2, 5, 4)
 
-hc = AgglomerativeClustering(
-    n_clusters=k,
-    linkage="ward",
-    metric="euclidean"
-)
-
+hc = AgglomerativeClustering(n_clusters=k, linkage="ward")
 labels = hc.fit_predict(scaled_data)
 
 sil_score = silhouette_score(scaled_data, labels)
@@ -116,41 +117,51 @@ sil_score = silhouette_score(scaled_data, labels)
 st.write(f"**Silhouette Score untuk k = {k}:** `{sil_score:.3f}`")
 
 # =====================================================
-# VISUALISASI CLUSTER
+# HASIL CLUSTERING
 # =====================================================
-st.header("Visualisasi Hasil Clustering")
+st.header("7️⃣ Visualisasi Hasil Clustering")
 
 df_clean["cluster"] = labels
 
 fig2, ax2 = plt.subplots(figsize=(6, 5))
 sns.scatterplot(
-    x=df_clean[data.columns[0]],
-    y=df_clean[data.columns[1]],
-    hue=df_clean["cluster"],
+    data=df_clean,
+    x="Ticket_Quantity",
+    y="Ticket_Price",
+    hue="cluster",
     palette="Set2",
     ax=ax2
 )
-ax2.set_title("Visualisasi Cluster")
+
+ax2.set_title("Scatter Plot Hasil Hierarchical Clustering")
+ax2.set_xlabel("Jumlah Tiket")
+ax2.set_ylabel("Harga Tiket")
 st.pyplot(fig2)
 
 # =====================================================
 # ANALISIS KARAKTERISTIK CLUSTER
 # =====================================================
-st.header("Analisis Karakteristik Cluster")
+st.header("8️⃣ Analisis Karakteristik Tiap Cluster")
 
-cluster_summary = df_clean.groupby("cluster")[data.columns].mean()
+cluster_summary = (
+    df_clean
+    .groupby("cluster")[features]
+    .mean()
+    .rename(columns={
+        "Ticket_Quantity": "Rata-rata Jumlah Tiket",
+        "Ticket_Price": "Rata-rata Harga Tiket"
+    })
+)
 
-st.write("**Rata-rata Tiap Fitur pada Setiap Cluster**")
+st.write("**Rata-rata Nilai Tiap Cluster**")
 st.dataframe(cluster_summary)
 
 # =====================================================
 # SIMPAN HASIL
 # =====================================================
-st.header("Simpan Hasil Clustering")
+st.header("9️⃣ Simpan Hasil Clustering")
 
-output_df = df_clean.copy()
-
-csv = output_df.to_csv(index=False).encode("utf-8")
+csv = df_clean.to_csv(index=False).encode("utf-8")
 
 st.download_button(
     label="Download Hasil Clustering (CSV)",
@@ -162,17 +173,17 @@ st.download_button(
 # =====================================================
 # KESIMPULAN
 # =====================================================
-st.header("Kesimpulan")
+st.header("🔍 Kesimpulan")
 
 st.write("""
-Metode **Hierarchical Clustering** berhasil mengelompokkan data penjualan tiket
-berdasarkan kemiripan nilai numerik.
+Hierarchical Clustering berhasil mengelompokkan transaksi
+penjualan tiket pesawat menjadi beberapa **segmen berdasarkan harga dan jumlah tiket**.
 
-Evaluasi menggunakan **Silhouette Score** menunjukkan bahwa nilai k tertentu
-memberikan kualitas cluster yang lebih baik.
+Hasil evaluasi Silhouette Score menunjukkan bahwa jumlah cluster yang dipilih
+memberikan pemisahan cluster yang **cukup baik (moderat)**.
 
-Hasil clustering dapat digunakan untuk:
-- Segmentasi penjualan
-- Analisis perilaku transaksi
-- Pengambilan keputusan bisnis
+Segmentasi ini dapat dimanfaatkan untuk:
+- Analisis pola pembelian
+- Segmentasi transaksi
+- Pengambilan keputusan bisnis berbasis nilai transaksi
 """)
